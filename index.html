@@ -418,7 +418,7 @@ body.host .pt:not(.me) .tag{right:30px}
       <section class="panel chat">
         <div class="phead"><h2>채팅</h2></div>
         <div id="log"></div>
-        <div class="send"><button class="clip" id="bFile" aria-label="파일 보내기"><svg class="i"><use href="#i-clip"/></svg></button><input type="file" id="fileIn" hidden><input id="msg" placeholder="메시지 보내기" autocomplete="off"><button id="sendB" aria-label="보내기"><svg class="i"><use href="#i-send"/></svg></button></div>
+        <div class="send"><button class="clip" id="bFile" aria-label="파일 보내기"><svg class="i"><use href="#i-clip"/></svg></button><input type="file" id="fileIn" hidden><input type="file" id="shareImgIn" accept="image/*" hidden><input id="msg" placeholder="메시지 보내기" autocomplete="off"><button id="sendB" aria-label="보내기"><svg class="i"><use href="#i-send"/></svg></button></div>
       </section>
       <nav class="mtabs" id="mtabs">
         <button id="tabStage" class="on"><svg class="i"><use href="#i-screen"/></svg>화면</button>
@@ -1062,22 +1062,70 @@ $('bCam').onclick=async()=>{
   setBtn('bCam',true,'cam'); setCam(me,camStream); pushAll();
   if(!micStream) $('bMic').onclick();
 };
+let imgShareTimer=null;
 $('bShare').onclick=async()=>{
   if(screenStream){ stopShare(); return; }
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){ toast('이 기기에서는 화면 공유를 할 수 없어요. PC의 크롬·엣지로 열어 주세요.'); return; }
+  // 폰처럼 화면 캡처가 없는 기기는 사진으로 대신 보여준다
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
+    pickShareImage('이 기기는 화면 캡처가 안 돼요. 보여줄 화면을 사진으로 골라 주세요');
+    return;
+  }
   try{
     screenStream=await navigator.mediaDevices.getDisplayMedia({
       video:{ displaySurface:'monitor', frameRate:{ideal:30} }, audio:true,
       systemAudio:'include', surfaceSwitching:'include', selfBrowserSurface:'exclude', preferCurrentTab:false });
-  }catch(e){ screenStream=null; if(e&&e.name==='NotAllowedError') toast('화면 공유를 취소했어요.'); else mediaErr('화면 공유',e); return; }
+  }catch(e){
+    screenStream=null;
+    if(e&&e.name==='NotAllowedError'){ toast('화면 공유를 취소했어요.'); return; }
+    pickShareImage('이 기기에서는 화면 캡처가 안 돼요. 사진으로 보여줄게요');
+    return;
+  }
   const v=screenStream.getVideoTracks()[0]; try{ v.contentHint='detail'; }catch(e){}
   v.onended=stopShare;
   setBtn('bShare',true,'stop','공유 중지');
   setShare(people.me,new MediaStream([v]));
   pushAll();
 };
+
+function pickShareImage(msg){ if(msg) toast(msg); $('shareImgIn').click(); }
+$('shareImgIn').onchange=e=>{ const f=e.target.files[0]; e.target.value=''; if(f) startImageShare(f); };
+
+function imageToStream(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const maxW=1280, k=Math.min(1, maxW/(img.width||1));
+      const c=document.createElement('canvas');
+      c.width=Math.max(2,Math.round((img.width||640)*k));
+      c.height=Math.max(2,Math.round((img.height||480)*k));
+      const g=c.getContext('2d');
+      const draw=()=>{ g.fillStyle='#161a22'; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height); };
+      draw();
+      // 사진은 움직이지 않으니, 1초에 한 번 다시 그려서 영상이 끊기지 않게 한다
+      const timer=setInterval(draw,1000);
+      URL.revokeObjectURL(url);
+      res({ stream:c.captureStream(1), timer });
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('이미지를 읽지 못했어요')); };
+    img.src=url;
+  });
+}
+async function startImageShare(file){
+  try{
+    const r=await imageToStream(file);
+    screenStream=r.stream; imgShareTimer=r.timer;
+    const v=screenStream.getVideoTracks()[0]; try{ v.contentHint='detail'; }catch(e){}
+    v.onended=stopShare;
+    setBtn('bShare',true,'stop','공유 중지');
+    setShare(people.me,new MediaStream([v]));
+    pushAll();
+    toast('사진을 화면으로 공유했어요');
+  }catch(e){ toast('사진을 공유하지 못했어요'); }
+}
 function stopShare(){
   if(!screenStream) return;
+  clearInterval(imgShareTimer); imgShareTimer=null;
   screenStream.getTracks().forEach(t=>t.stop()); screenStream=null;
   setBtn('bShare',false,'screen','화면 공유'); setShare(people.me,null); pushAll();
 }
@@ -1322,7 +1370,6 @@ if(/KAKAOTALK/i.test(navigator.userAgent) && /^https?:$/.test(location.protocol)
   location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(location.href);
 }
 window.addEventListener('load',()=>{
-  if(!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) $('bShare').hidden=true;
   try{ const n=localStorage.getItem('svName'); if(n) $('nick').value=n; }catch(e){}
   // 파일로 연 경우: 웹 주소(미니PC)에서만 쓰도록 안내한다
   if(isFile){
