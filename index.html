@@ -239,6 +239,7 @@ body.view-notes #notes{display:block}
 .volrow button.on{background:var(--coral);color:#fff;box-shadow:none}
 .volrow input[type=range]{flex:1;min-width:0;accent-color:var(--blue)}
 .volrow span{width:2.4rem;text-align:right;font-size:13.5px;font-weight:700;color:var(--sub);flex:0 0 auto}
+.sheet ol small{color:var(--sub);font-size:12.5px;font-weight:500}
 .sheet .col{display:flex;flex-direction:column;gap:9px;margin-top:4px}
 .sheet .col button{height:52px;border-radius:16px;font-size:16px;font-weight:700;background:var(--well);color:var(--ink);
   display:flex;align-items:center;justify-content:center;gap:8px}
@@ -464,6 +465,25 @@ body.view-notes #notes{display:block}
   </div>
 </section>
 
+<div class="sheet" id="phguide">
+  <div class="scd">
+    <h3>폰 화면 공유하기</h3>
+    <p>폰 화면을 이 컴퓨터 창으로 띄운 뒤, 그 창을 공유합니다. <b>안드로이드 전용</b>이고 설치는 필요 없습니다.</p>
+    <ol>
+      <li>폰을 <b>USB로 연결</b>하세요<br>
+          <small>처음이면 폰에서: 설정 → 휴대전화 정보 → 빌드번호 7번 연타 → 개발자 옵션 → USB 디버깅 켜기</small></li>
+      <li>아래 <b>[프로그램 받기]</b> → 받은 <b>phone-screen.exe</b> <b>더블클릭</b><br>
+          <small>설치 없습니다. 압축도 풀 필요 없습니다. 파란 경고창이 뜨면 [추가 정보] → [실행]</small></li>
+      <li>폰에 뜨는 <b>[USB 디버깅 허용]</b> 누르기 → <b>폰 화면 창</b>이 뜹니다</li>
+      <li>아래 <b>[폰 화면 창 공유]</b> → 목록에서 <b>"폰 화면"</b> 창 선택</li>
+    </ol>
+    <div class="col">
+      <button class="main" id="phGet">프로그램 받기</button>
+      <button id="phShare">폰 화면 창 공유</button>
+      <button id="phNo">닫기</button>
+    </div>
+  </div>
+</div>
 <div class="sheet" id="shmenu">
   <div class="scd">
     <h3>화면 공유</h3>
@@ -1233,10 +1253,33 @@ async function startShare(slot){
   if(slot===2) toast('화면 2개를 공유 중이에요');
 }
 
+const PHONE_PKG = 'https://imist.co.kr/static/phone-screen.exe';
 $('bShare').onclick=()=>{
-  if(shareCount()===0){ startShare(1); return; }
-  openShareMenu();
+  if(shareCount()>0){ openShareMenu(); return; }
+  if(IS_PHONE){ startShare(1); return; }   // 폰은 바로 (사진 공유로 넘어간다)
+  openShareChoice();
 };
+function openShareChoice(){
+  const box=$('shmBtns'); box.innerHTML='';
+  const add=(label,cls,fn)=>{
+    const b=document.createElement('button');
+    if(cls) b.className=cls;
+    b.textContent=label;
+    b.onclick=()=>{ closeShareMenu(); fn(); };
+    box.appendChild(b);
+  };
+  add('이 컴퓨터 화면 공유','main',()=>startShare(1));
+  add('폰 화면 공유하기','',()=>openPhoneGuide());
+  add('닫기','',closeShareMenu);
+  $('shmP').textContent = '무엇을 보여줄까요?';
+  $('shmenu').classList.add('show');
+}
+function openPhoneGuide(){ $('phguide').classList.add('show'); }
+function closePhoneGuide(){ $('phguide').classList.remove('show'); }
+$('phNo').onclick=closePhoneGuide;
+$('phguide').addEventListener('click',e=>{ if(e.target===$('phguide')) closePhoneGuide(); });
+$('phGet').onclick=()=>{ window.open(PHONE_PKG,'_blank'); toast('내려받는 중이에요. 받은 phone-screen.exe 를 더블클릭하세요'); };
+$('phShare').onclick=()=>{ closePhoneGuide(); startShare(freeSlot()||1); };
 
 function closeShareMenu(){ $('shmenu').classList.remove('show'); }
 $('shmenu').addEventListener('click',e=>{ if(e.target===$('shmenu')) closeShareMenu(); });
@@ -1251,6 +1294,7 @@ function openShareMenu(){
   };
   const n=shareCount();
   if(n<2) add('화면 하나 더 공유','main',()=>startShare(freeSlot()));
+  if(n<2 && !IS_PHONE) add('폰 화면 공유하기','',()=>openPhoneGuide());
   if(screenStream)  add(n>1?'첫 번째 화면 중지':'공유 중지','warn',()=>stopShare(1));
   if(screen2Stream) add('두 번째 화면 중지','warn',()=>stopShare(2));
   if(n>1)           add('둘 다 중지','warn',()=>{ stopShare(1); stopShare(2); });
