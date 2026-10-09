@@ -622,7 +622,7 @@ function setLink(P,state){
 }
 function dropPerson(id){
   const P=people[id]; if(!P) return;
-  setShare(P,null); setCam(P,null); setAudio(P,null);
+  setShare(P,null,1); setShare(P,null,2); setCam(P,null); setAudio(P,null);   // 두 번째 화면 카드도 같이 치운다
   if(P.tile) P.tile.remove();
   delete people[id]; renderPeople();
 }
