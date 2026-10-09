@@ -457,6 +457,13 @@ body.view-notes #notes{display:block}
   </div>
 </section>
 
+<div class="sheet" id="shmenu">
+  <div class="scd">
+    <h3>화면 공유</h3>
+    <p id="shmP"></p>
+    <div class="col" id="shmBtns"></div>
+  </div>
+</div>
 <div class="sheet" id="pmenu">
   <div class="scd">
     <h3 id="pmT">참여자</h3>
@@ -544,7 +551,7 @@ let mode=null, db=null, roomCode=null, myId=null, myName='', joined=false, hostI
 let listeners=[];
 const conns={};           // 상대 id -> {pc, dc, init, cands, q}
 const people={};          // 화면에 보이는 사람
-let screenStream=null, micStream=null, camStream=null;
+let screenStream=null, screen2Stream=null, micStream=null, camStream=null;
 let actx=null, mixNodes=[], mixTrack=null, focusId=null, focusKind='share';
 
 /* ═══ 공통 ═══ */
@@ -575,8 +582,8 @@ function addSys(text){ const d=document.createElement('div'); d.className='m sys
 function person(id,name,isMe){
   let P=people[id];
   if(!P){
-    P=people[id]={ id, name:name||'참가자', me:!!isMe, mic:false, rs:{}, camStream:null, shareStream:null, tile:null, card:null,
-                   audioEl:null, an:null, buf:null, level:0, fakeTalk:null, shareMS:null, camMS:null, audioMS:null };
+    P=people[id]={ id, name:name||'참가자', me:!!isMe, mic:false, rs:{}, camStream:null, shareStream:null, shareStream2:null, tile:null, card:null, card2:null,
+                   audioEl:null, an:null, buf:null, level:0, fakeTalk:null, shareMS:null, shareMS2:null, camMS:null, audioMS:null };
     const t=document.createElement('div'); t.className='pt'+(isMe?' me':' linking');
     t.innerHTML='<video playsinline autoplay muted></video><div class="big"><span class="av"></span></div><span class="link">연결 중…</span><span class="tag">공유 중</span>'+
                 '<button class="kick" title="참여자 관리">'+ico('more')+'</button>'+
@@ -597,12 +604,13 @@ function paint(P){
   const av=P.tile.querySelector('.av'); av.textContent=initial(P.name); av.style.background=hueOf(P.me?'me':P.id);
   P.tile.classList.toggle('camon', !!P.camStream);
   P.tile.classList.toggle('micoff', !P.mic);
-  P.tile.classList.toggle('sharing', !!P.shareStream);
-  if(P.card){
-    const a=P.card.querySelector('.av'); a.textContent=initial(P.name); a.style.background=av.style.background;
-    P.card.querySelector('b').textContent = P.me ? '내 화면' : P.name;
-    P.card.querySelector('.sub').textContent = P.me ? '' : '님 화면';
-  }
+  P.tile.classList.toggle('sharing', !!(P.shareStream||P.shareStream2));
+  [P.card, P.card2].forEach((c,i)=>{
+    if(!c) return;
+    const a=c.querySelector('.av'); a.textContent=initial(P.name); a.style.background=av.style.background;
+    c.querySelector('b').textContent = P.me ? ('내 화면' + (i===1 ? ' 2' : '')) : P.name;
+    c.querySelector('.sub').textContent = P.me ? '' : ('님 화면' + (i===1 ? ' 2' : ''));
+  });
 }
 function setLink(P,state){
   if(!P || !P.tile || P.me) return;
@@ -724,20 +732,24 @@ function setCam(P,st){
   if(v && v.srcObject!==P.camStream){ v.srcObject=P.camStream; if(st) v.play().catch(()=>{}); }
   paint(P); renderStage();
 }
-function setShare(P,st){
+function setShare(P,st,slot){
+  slot = (slot===2) ? 2 : 1;
+  const KS = slot===2 ? 'shareStream2' : 'shareStream';
+  const KC = slot===2 ? 'card2' : 'card';
+  const kind = slot===2 ? 'share2' : 'share';
   st=st||null;
-  if(P.shareStream===st && (!!P.card===!!st)) return;
-  P.shareStream=st;
+  if(P[KS]===st && (!!P[KC]===!!st)) return;
+  P[KS]=st;
   if(st){
-    if(!P.card){
+    if(!P[KC]){
       const c=document.createElement('button'); c.className='scard';
       c.innerHTML='<div class="sthumb"><video playsinline autoplay muted></video><span class="livebadge">LIVE</span></div>'+
                   '<div class="sfoot"><span class="av"></span><b></b><span class="sub"></span><span class="open">'+ico('expand')+'크게 보기</span></div>';
-      c.onclick=()=>{ const same = (focusId===P.id && focusKind==='share'); focusId = same ? null : P.id; focusKind='share'; renderStage(); if(focusId && isSmall()) setTab('stage'); };
-      P.card=c; $('shares').appendChild(c);
+      c.onclick=()=>{ const same = (focusId===P.id && focusKind===kind); focusId = same ? null : P.id; focusKind=kind; renderStage(); if(focusId && isSmall()) setTab('stage'); };
+      P[KC]=c; $('shares').appendChild(c);
     }
-    const v=P.card.querySelector('video'); if(v.srcObject!==st){ v.srcObject=st; v.play().catch(()=>{}); }
-  }else if(P.card){ P.card.remove(); P.card=null; }
+    const v=P[KC].querySelector('video'); if(v.srcObject!==st){ v.srcObject=st; v.play().catch(()=>{}); }
+  }else if(P[KC]){ P[KC].remove(); P[KC]=null; }
   paint(P); renderStage();
 }
 function setAudio(P,st){
@@ -754,14 +766,24 @@ function setAudio(P,st){
   }
 }
 let autoFocusDone=false;
+function streamOf(P,kind){ return kind==='cam' ? P.camStream : (kind==='share2' ? P.shareStream2 : P.shareStream); }
+function allShares(){   // [{P, kind}] — 한 사람이 화면 2개를 올릴 수 있다
+  const out=[];
+  Object.values(people).forEach(p=>{
+    if(p.shareStream)  out.push({P:p, kind:'share'});
+    if(p.shareStream2) out.push({P:p, kind:'share2'});
+  });
+  return out;
+}
 function renderStage(){
-  const sharers=Object.values(people).filter(p=>p.shareStream);
+  const shares=allShares();
+  const sharers=shares;
   // 크게 보던 대상이 사라졌으면(공유 중지·카메라 끔) 원래대로
   const F = focusId ? people[focusId] : null;
-  if(!F || !(focusKind==='cam' ? F.camStream : F.shareStream)) focusId=null;
+  if(!F || !streamOf(F, focusKind)) focusId=null;
   // 폰에서는 공유 화면이 뜨면 바로 크게 보여준다
-  if(!sharers.length) autoFocusDone=false;
-  else if(!focusId && !autoFocusDone && isSmall()){ focusId=sharers[0].id; focusKind='share'; autoFocusDone=true; }
+  if(!shares.length) autoFocusDone=false;
+  else if(!focusId && !autoFocusDone && isSmall()){ focusId=shares[0].P.id; focusKind=shares[0].kind; autoFocusDone=true; }
   const cam = !!focusId && focusKind==='cam';
   const st=$('stage');
   st.classList.toggle('focused',!!focusId); st.classList.toggle('camfocus',cam);
@@ -770,14 +792,18 @@ function renderStage(){
   const v=$('vv');
   if(focusId){
     const P=people[focusId];
-    const ms = cam ? P.camStream : P.shareStream;
+    const ms = streamOf(P, focusKind);
     if(v.srcObject!==ms){ v.srcObject=ms; v.play().catch(()=>{}); }
     v.classList.toggle('mirror', cam && !!P.me);
+    const two = (focusKind==='share2') ? ' 2' : '';
     $('vname').textContent = cam ? (P.me ? '내 카메라' : P.name+' 님의 카메라')
-                                 : (P.me ? '내 화면'   : P.name+' 님의 화면');
+                                 : ((P.me ? '내 화면'   : P.name+' 님의 화면') + two);
     $('vav').textContent=initial(P.name); $('vav').style.background=hueOf(P.me?'me':P.id);
   }else if(v.srcObject){ v.srcObject=null; v.classList.remove('mirror'); if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); }
-  sharers.forEach(p=> p.card && p.card.classList.toggle('active', p.id===focusId && !cam));
+  shares.forEach(x=>{
+    const c = x.kind==='share2' ? x.P.card2 : x.P.card;
+    if(c) c.classList.toggle('active', x.P.id===focusId && focusKind===x.kind);
+  });
   Object.values(people).forEach(p=> p.tile && p.tile.classList.toggle('bigcam', cam && p.id===focusId));
 }
 function goFull(){ try{ if(!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){} }
@@ -813,7 +839,8 @@ function refreshStatus(){
 
 /* ═══ 상대 상태 반영 ═══ */
 function syncRemote(P){
-  setShare(P, P.rs.share && P.shareMS ? P.shareMS : null);
+  setShare(P, P.rs.share  && P.shareMS  ? P.shareMS  : null, 1);
+  setShare(P, P.rs.share2 && P.shareMS2 ? P.shareMS2 : null, 2);
   setCam(P,   P.rs.cam   && P.camMS   ? P.camMS   : null);
   P.mic=!!P.rs.mic; paint(P);
 }
@@ -821,6 +848,7 @@ function applyState(P,s){
   s=s||{};
   if(P._init){
     if(!!s.share!==!!P.rs.share){ const m=P.name+(s.share?'님이 화면 공유를 시작했어요':'님이 화면 공유를 멈췄어요'); addSys(m); if(s.share) toast(m); }
+    if(!!s.share2!==!!P.rs.share2){ const m=P.name+(s.share2?'님이 화면을 하나 더 공유했어요':'님이 두 번째 화면을 멈췄어요'); addSys(m); if(s.share2) toast(m); }
     if(s.cam && !P.rs.cam) addSys(P.name+'님이 카메라를 켰어요');
   }
   P._init=true; P.rs=s; syncRemote(P);
@@ -829,7 +857,7 @@ function applyState(P,s){
 /* ═══ 연결 (Firebase로 신호만 주고받고, 영상·소리는 직접 연결) ═══ */
 function roomRef(p){ return db.ref(ROOT+'/'+roomCode+(p?'/'+p:'')); }
 function signal(to,type,data){ roomRef('sig/'+to).push({from:myId,type,data:JSON.stringify(data)}); }
-function myState(){ return { mic:!!micStream, cam:!!camStream, share:!!screenStream }; }
+function myState(){ return { mic:!!micStream, cam:!!camStream, share:!!screenStream, share2:!!screen2Stream }; }
 function dcSend(C,o){ if(C.dc && C.dc.readyState==='open') try{ C.dc.send(JSON.stringify(o)); }catch(e){} }
 function tx(o){ Object.values(conns).forEach(C=>dcSend(C,o)); }
 function sendState(){ tx({t:'state',s:myState()}); }
@@ -853,9 +881,11 @@ function capFor(base){
 function applyTracks(C){
   const ts=C.pc.getTransceivers(); if(ts.length<3) return;
   const sv=screenStream?screenStream.getVideoTracks()[0]:null, cv=camStream?camStream.getVideoTracks()[0]:null;
+  const sv2=screen2Stream?screen2Stream.getVideoTracks()[0]:null;
   ts[0].sender.replaceTrack(sv).catch(()=>{});
   ts[1].sender.replaceTrack(mixTrack).catch(()=>{});
   ts[2].sender.replaceTrack(cv).catch(()=>{});
+  if(ts[3]){ ts[3].sender.replaceTrack(sv2).catch(()=>{}); capSender(ts[3].sender, capFor(CAP_SCREEN), 'maintain-resolution'); }
   // 폰이 과부하로 멈추지 않게 보내는 양을 제한한다
   capSender(ts[0].sender, capFor(CAP_SCREEN), 'maintain-resolution');  // 화면은 글자가 보여야 하니 해상도 우선
   capSender(ts[2].sender, capFor(CAP_CAM),    'balanced');
@@ -869,7 +899,7 @@ function ensureConn(id){
   pc.onicecandidate=e=>{ if(e.candidate) signal(id,'cand',e.candidate.toJSON()); };
   pc.ontrack=e=>{
     const idx=pc.getTransceivers().indexOf(e.transceiver), P=person(id), ms=new MediaStream([e.track]);
-    if(idx===0) P.shareMS=ms; else if(idx===1){ P.audioMS=ms; setAudio(P,ms); } else if(idx===2) P.camMS=ms;
+    if(idx===0) P.shareMS=ms; else if(idx===1){ P.audioMS=ms; setAudio(P,ms); } else if(idx===2) P.camMS=ms; else if(idx===3) P.shareMS2=ms;
     syncRemote(P);
   };
   pc.ondatachannel=e=>bindDC(C,e.channel);
@@ -879,7 +909,7 @@ function ensureConn(id){
     if(s==='failed' && C.restarts>=2 && people[id]) toast(people[id].name+'님과 직접 연결이 안 돼요. 네트워크가 막고 있을 수 있어요.');
   };
   if(C.init){
-    ['video','audio','video'].forEach(k=>pc.addTransceiver(k,{direction:'sendrecv'}));
+    ['video','audio','video','video'].forEach(k=>pc.addTransceiver(k,{direction:'sendrecv'}));  // 화면1, 소리, 카메라, 화면2
     applyTracks(C);
     bindDC(C, pc.createDataChannel('chat'));
     pc.onnegotiationneeded=()=>{ C.q=C.q.then(async()=>{
@@ -1038,7 +1068,8 @@ $('go').onclick=async()=>{
 function rebuildMix(){
   mixNodes.forEach(n=>{ try{ n.disconnect(); }catch(e){} }); mixNodes=[];
   const srcs=[];
-  if(screenStream) screenStream.getAudioTracks().forEach(t=>srcs.push(t));
+  if(screenStream)  screenStream.getAudioTracks().forEach(t=>srcs.push(t));
+  if(screen2Stream) screen2Stream.getAudioTracks().forEach(t=>srcs.push(t));
   if(micStream)    micStream.getAudioTracks().forEach(t=>srcs.push(t));
   if(!srcs.length){ mixTrack=null; return; }
   if(srcs.length===1){ mixTrack=srcs[0]; return; }
@@ -1120,32 +1151,76 @@ $('bCam').onclick=async()=>{
   setBtn('bCam',true,'cam'); setCam(me,camStream); pushAll();
   if(!micStream) $('bMic').onclick();
 };
-let imgShareTimer=null;
-$('bShare').onclick=async()=>{
-  if(screenStream){ stopShare(); return; }
+let imgShareTimer=null, imgShareTimer2=null;
+
+function shareCount(){ return (screenStream?1:0) + (screen2Stream?1:0); }
+function updateShareBtn(){
+  const n=shareCount();
+  setBtn('bShare', n>0, n>0?'stop':'screen', n===0 ? '화면 공유' : (n===1 ? '공유 중지' : '2개 공유 중'));
+}
+function freeSlot(){ return !screenStream ? 1 : (!screen2Stream ? 2 : 0); }
+function putShare(slot, stream, timer){
+  if(slot===2){ screen2Stream=stream; imgShareTimer2=timer||null; }
+  else        { screenStream=stream;  imgShareTimer =timer||null; }
+  const v=stream.getVideoTracks()[0];
+  try{ v.contentHint='detail'; }catch(e){}
+  v.onended=()=>stopShare(slot);
+  setShare(people.me, new MediaStream([v]), slot);
+  updateShareBtn();
+  pushAll();
+}
+
+async function startShare(slot){
+  if(!slot) { toast('화면은 2개까지 공유할 수 있어요'); return; }
   // 폰처럼 화면 캡처가 없는 기기는 사진으로 대신 보여준다
   if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
-    pickShareImage('이 기기는 화면 캡처가 안 돼요. 보여줄 화면을 사진으로 골라 주세요');
+    pickShareImage(slot, '이 기기는 화면 캡처가 안 돼요. 보여줄 화면을 사진으로 골라 주세요');
     return;
   }
+  let st=null;
   try{
-    screenStream=await navigator.mediaDevices.getDisplayMedia({
+    st=await navigator.mediaDevices.getDisplayMedia({
       video:{ displaySurface:'monitor', frameRate:{ideal: IS_PHONE?10:30} }, audio:true,
       systemAudio:'include', surfaceSwitching:'include', selfBrowserSurface:'exclude', preferCurrentTab:false });
   }catch(e){
-    screenStream=null;
     if(e&&e.name==='NotAllowedError'){ toast('화면 공유를 취소했어요.'); return; }
-    pickShareImage('이 기기에서는 화면 캡처가 안 돼요. 사진으로 보여줄게요');
+    pickShareImage(slot, '이 기기에서는 화면 캡처가 안 돼요. 사진으로 보여줄게요');
     return;
   }
-  const v=screenStream.getVideoTracks()[0]; try{ v.contentHint='detail'; }catch(e){}
-  v.onended=stopShare;
-  setBtn('bShare',true,'stop','공유 중지');
-  setShare(people.me,new MediaStream([v]));
-  pushAll();
+  putShare(slot, st);
+  if(slot===2) toast('화면 2개를 공유 중이에요');
+}
+
+$('bShare').onclick=()=>{
+  if(shareCount()===0){ startShare(1); return; }
+  openShareMenu();
 };
 
-function pickShareImage(msg){ if(msg) toast(msg); $('shareImgIn').click(); }
+function closeShareMenu(){ $('shmenu').classList.remove('show'); }
+$('shmenu').addEventListener('click',e=>{ if(e.target===$('shmenu')) closeShareMenu(); });
+function openShareMenu(){
+  const box=$('shmBtns'); box.innerHTML='';
+  const add=(label,cls,fn)=>{
+    const b=document.createElement('button');
+    if(cls) b.className=cls;
+    b.textContent=label;
+    b.onclick=()=>{ closeShareMenu(); fn(); };
+    box.appendChild(b);
+  };
+  const n=shareCount();
+  if(n<2) add('화면 하나 더 공유','main',()=>startShare(freeSlot()));
+  if(screenStream)  add(n>1?'첫 번째 화면 중지':'공유 중지','warn',()=>stopShare(1));
+  if(screen2Stream) add('두 번째 화면 중지','warn',()=>stopShare(2));
+  if(n>1)           add('둘 다 중지','warn',()=>{ stopShare(1); stopShare(2); });
+  add('닫기','',closeShareMenu);
+  $('shmP').textContent = n===1
+    ? '지금 화면 1개를 공유 중이에요. 폰 화면 창을 하나 더 공유할 수 있어요.'
+    : '지금 화면 2개를 공유 중이에요.';
+  $('shmenu').classList.add('show');
+}
+
+let imgSlot=1;
+function pickShareImage(slot, msg){ imgSlot = slot||1; if(msg) toast(msg); $('shareImgIn').click(); }
 $('shareImgIn').onchange=e=>{ const f=e.target.files[0]; e.target.value=''; if(f) startImageShare(f); };
 
 function imageToStream(file){
@@ -1172,20 +1247,20 @@ function imageToStream(file){
 async function startImageShare(file){
   try{
     const r=await imageToStream(file);
-    screenStream=r.stream; imgShareTimer=r.timer;
-    const v=screenStream.getVideoTracks()[0]; try{ v.contentHint='detail'; }catch(e){}
-    v.onended=stopShare;
-    setBtn('bShare',true,'stop','공유 중지');
-    setShare(people.me,new MediaStream([v]));
-    pushAll();
+    putShare(imgSlot, r.stream, r.timer);
     toast('사진을 화면으로 공유했어요');
   }catch(e){ toast('사진을 공유하지 못했어요'); }
 }
-function stopShare(){
-  if(!screenStream) return;
-  clearInterval(imgShareTimer); imgShareTimer=null;
-  screenStream.getTracks().forEach(t=>t.stop()); screenStream=null;
-  setBtn('bShare',false,'screen','화면 공유'); setShare(people.me,null); pushAll();
+function stopShare(slot){
+  slot = (slot===2) ? 2 : 1;
+  const st = slot===2 ? screen2Stream : screenStream;
+  if(!st) return;
+  if(slot===2){ clearInterval(imgShareTimer2); imgShareTimer2=null; screen2Stream=null; }
+  else        { clearInterval(imgShareTimer);  imgShareTimer =null; screenStream =null; }
+  st.getTracks().forEach(t=>t.stop());
+  setShare(people.me, null, slot);
+  updateShareBtn();
+  pushAll();
 }
 
 function sendChat(){
