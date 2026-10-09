@@ -154,7 +154,9 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke
   background:rgba(255,255,255,.92);font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden}
 .pt .nm .t{overflow:hidden;text-overflow:ellipsis}
 .pt .nm svg.i{width:13px;height:13px;margin-left:auto;color:var(--coral);display:none}
-.pt.micoff .nm svg.i{display:block}
+.pt .nm svg.i + svg.i{margin-left:3px}
+.pt.silenced .nm svg.i:last-child{display:block;color:#7a8192}
+.pt.micoff .nm svg.i:first-of-type{display:block}
 .pt .nm .crown{display:none;flex:0 0 auto;align-items:center;height:15px;padding:0 5px;border-radius:5px;
   background:#f0a52a;color:#fff;font-size:9.5px;font-weight:800;letter-spacing:-.02em}
 .pt.ishost .nm .crown{display:inline-flex}
@@ -167,8 +169,8 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke
   display:none;align-items:center;justify-content:center;padding:0}
 .pt .kick svg.i{width:13px;height:13px;stroke-width:2.6}
 .pt .kick:hover{background:var(--coral)}
-body.host .pt:not(.me) .kick{display:flex}
-body.host .pt:not(.me) .tag{right:30px}
+.pt:not(.me):not(.slot) .kick{display:flex}
+.pt:not(.me):not(.slot) .tag{right:30px}
 .pt.slot{background:transparent;border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:12px;font-weight:600}
 
 .chat{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
@@ -232,6 +234,11 @@ body.view-notes #notes{display:block}
 .sheet p{margin:0 0 16px;color:var(--sub);font-size:14.5px}
 .sheet ol{margin:0 0 18px;padding-left:20px;color:var(--ink);font-size:14.5px;line-height:1.75}
 .sheet ol b{font-weight:800}
+.volrow{display:flex;align-items:center;gap:11px;margin:2px 0 16px;padding:10px 12px;border-radius:16px;background:var(--well)}
+.volrow button{width:42px;height:42px;border-radius:13px;background:var(--surface);box-shadow:var(--raise);display:flex;align-items:center;justify-content:center;color:#4a5160;flex:0 0 auto}
+.volrow button.on{background:var(--coral);color:#fff;box-shadow:none}
+.volrow input[type=range]{flex:1;min-width:0;accent-color:var(--blue)}
+.volrow span{width:2.4rem;text-align:right;font-size:13.5px;font-weight:700;color:var(--sub);flex:0 0 auto}
 .sheet .col{display:flex;flex-direction:column;gap:9px;margin-top:4px}
 .sheet .col button{height:52px;border-radius:16px;font-size:16px;font-weight:700;background:var(--well);color:var(--ink);
   display:flex;align-items:center;justify-content:center;gap:8px}
@@ -467,7 +474,12 @@ body.view-notes #notes{display:block}
 <div class="sheet" id="pmenu">
   <div class="scd">
     <h3 id="pmT">참여자</h3>
-    <p id="pmP">이 사람에게 할 일을 고르세요.</p>
+    <p id="pmP">이 사람 소리를 조절할 수 있어요.</p>
+    <div class="volrow">
+      <button id="pmMute" aria-label="음소거"><svg class="i"><use href="#i-spkoff"/></svg></button>
+      <input type="range" id="pmVol" min="0" max="100" value="100">
+      <span id="pmVolN">100</span>
+    </div>
     <div class="col">
       <button class="main" id="pmGive"></button>
       <button class="warn" id="pmKick"></button>
@@ -507,6 +519,7 @@ body.view-notes #notes{display:block}
   <symbol id="i-crown" viewBox="0 0 24 24"><path d="M4 18h16M4 18l-1.5-9 5 3.5L12 5l4.5 7.5 5-3.5L20 18"/></symbol>
   <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M3.5 17l5-5 4.5 4.5 3-2.5 4.5 4"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="i-spkoff" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l4 6M21 9l-4 6"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5z"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 8v8M8 12h8"/></symbol>
   <symbol id="i-in" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M9 7l5 5-5 5M14 12H3"/></symbol>
@@ -583,11 +596,12 @@ function person(id,name,isMe){
   let P=people[id];
   if(!P){
     P=people[id]={ id, name:name||'참가자', me:!!isMe, mic:false, rs:{}, camStream:null, shareStream:null, shareStream2:null, tile:null, card:null, card2:null,
-                   audioEl:null, an:null, buf:null, level:0, fakeTalk:null, shareMS:null, shareMS2:null, camMS:null, audioMS:null };
+                   audioEl:null, an:null, buf:null, level:0, fakeTalk:null, shareMS:null, shareMS2:null, camMS:null, audioMS:null,
+                   vol:1, silenced:false };
     const t=document.createElement('div'); t.className='pt'+(isMe?' me':' linking');
     t.innerHTML='<video playsinline autoplay muted></video><div class="big"><span class="av"></span></div><span class="link">연결 중…</span><span class="tag">공유 중</span>'+
                 '<button class="kick" title="참여자 관리">'+ico('more')+'</button>'+
-                '<div class="nm"><span class="crown">방장</span><span class="t"></span>'+ico('micoff')+'</div>';
+                '<div class="nm"><span class="crown">방장</span><span class="t"></span>'+ico('micoff')+ico('spkoff')+'</div>';
     if(!isMe) t.querySelector('.kick').onclick=ev=>{ ev.stopPropagation(); openPeopleMenu(id); };
     t.title='큰 화면으로 보기';
     t.onclick=()=>focusCam(id);
@@ -679,14 +693,37 @@ async function doVerifyHost(){
 let pmTarget=null;
 function openPeopleMenu(id){
   const P=people[id]; if(!P || P.me) return;
-  if(!hostId || hostId!==myId){ toast('방장만 쓸 수 있어요'); return; }
   pmTarget=id;
+  const amHost = !!hostId && hostId===myId;
   $('pmT').textContent = P.name;
-  $('pmP').textContent = '이 사람에게 할 일을 고르세요.';
+  $('pmP').textContent = amHost ? '소리를 조절하거나, 방장 권한을 넘기거나 내보낼 수 있어요.'
+                                : '이 사람 소리를 조절할 수 있어요. (나에게만 적용됩니다)';
+  $('pmVol').value = Math.round((typeof P.vol==='number'?P.vol:1)*100);
+  $('pmVolN').textContent = $('pmVol').value;
+  $('pmMute').classList.toggle('on', !!P.silenced);
   $('pmGive').innerHTML = ico('crown')+'방장 넘기기';
   $('pmKick').innerHTML = ico('x')+'내보내기';
+  $('pmGive').hidden = !amHost;
+  $('pmKick').hidden = !amHost;
   $('pmenu').classList.add('show');
 }
+function pmPerson(){ return pmTarget ? people[pmTarget] : null; }
+$('pmVol').addEventListener('input',()=>{
+  const P=pmPerson(); if(!P) return;
+  P.vol = Number($('pmVol').value)/100;
+  if(P.vol>0) P.silenced=false;
+  $('pmVolN').textContent = $('pmVol').value;
+  $('pmMute').classList.toggle('on', !!P.silenced);
+  applyVolume(P);
+});
+$('pmMute').onclick=()=>{
+  const P=pmPerson(); if(!P) return;
+  P.silenced = !P.silenced;
+  if(!P.silenced && (!P.vol || P.vol===0)){ P.vol=1; $('pmVol').value=100; $('pmVolN').textContent='100'; }
+  $('pmMute').classList.toggle('on', !!P.silenced);
+  applyVolume(P);
+  toast(P.name + (P.silenced ? '님 소리를 껐어요 (나에게만)' : '님 소리를 다시 켰어요'));
+};
 function closePeopleMenu(){ $('pmenu').classList.remove('show'); pmTarget=null; }
 $('pmNo').onclick=closePeopleMenu;
 $('pmenu').addEventListener('click',e=>{ if(e.target===$('pmenu')) closePeopleMenu(); });
@@ -752,12 +789,17 @@ function setShare(P,st,slot){
   }else if(P[KC]){ P[KC].remove(); P[KC]=null; }
   paint(P); renderStage();
 }
+function applyVolume(P){
+  if(P.audioEl){ P.audioEl.volume = P.silenced ? 0 : (typeof P.vol==='number' ? P.vol : 1); P.audioEl.muted = !!P.silenced; }
+  if(P.tile) P.tile.classList.toggle('silenced', !!P.silenced || P.vol===0);
+}
 function setAudio(P,st){
   if(P.an){ try{ P.anSrc.disconnect(); }catch(e){} P.an=null; }
   if(!P.me){
     if(st){
       if(!P.audioEl){ P.audioEl=document.createElement('audio'); P.audioEl.autoplay=true; $('audios').appendChild(P.audioEl); }
       if(P.audioEl.srcObject!==st){ P.audioEl.srcObject=st; P.audioEl.play().catch(()=>{}); }
+      applyVolume(P);   // 그 사람에게 걸어둔 볼륨·음소거를 그대로 유지
     }else if(P.audioEl){ P.audioEl.srcObject=null; P.audioEl.remove(); P.audioEl=null; }
   }
   if(st && st.getAudioTracks().length){
