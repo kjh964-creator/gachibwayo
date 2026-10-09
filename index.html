@@ -15,6 +15,9 @@
   font-family:'Pretendard Variable',Pretendard,'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
 }
 *{box-sizing:border-box}
+/* 버튼·이름표 같은 조작 요소의 글자는 선택되지 않게 (눌렀을 때 파랗게 긁히는 것 방지) */
+body{-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#log,#notes,input,textarea,.m,.fmsg,.roompill b,.invite b,#icode{-webkit-user-select:text;user-select:text}
 html,body{height:100%;margin:0}
 body{background:radial-gradient(120% 90% at 20% 0%,#f8f4f0 0%,var(--canvas) 55%,#ece6e0 100%) fixed;color:var(--ink);
   font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;
