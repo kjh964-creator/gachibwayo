@@ -141,7 +141,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .phead span{font-size:13px;color:var(--sub);font-weight:700}
 #hostname{margin-left:auto;font-size:12px;font-weight:700;color:#c07d10;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:11rem}
 .ppl{flex:0 0 auto}
-#people{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px 12px}
+#people{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;padding:10px 12px 12px}
 .pt{position:relative;border-radius:14px;background:var(--well);overflow:hidden;aspect-ratio:4/3;transition:box-shadow .15s}
 .pt.speaking{box-shadow:0 0 0 3px var(--green)}
 .pt video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
@@ -382,7 +382,7 @@ body.view-notes #notes{display:block}
 <section id="entry">
   <div class="ecard">
     <h1>같이봐요</h1>
-    <p class="lead">화면 공유하면서 얼굴 보고 얘기해요. 최대 4명.</p>
+    <p class="lead">화면 공유하면서 얼굴 보고 얘기해요. 최대 <b id="maxN">8</b>명.</p>
     <label class="lbl" for="nick">닉네임</label>
     <input class="tin" id="nick" maxlength="10" placeholder="다른 사람에게 보일 이름" autocomplete="off">
     <div class="choices">
@@ -522,7 +522,7 @@ body.view-notes #notes{display:block}
 /* ═══ 설정 ═══ */
 const DB_URL = 'https://led-panel-3630e-default-rtdb.firebaseio.com';   // 연결 중계용 (sv_rooms 경로만 사용)
 const ROOT   = 'sv_rooms';
-const MAX    = 4;
+const MAX    = 8;
 const WEB_URL = 'https://imist.co.kr/meet/';   // 파일로 열었을 때 쓸 초대 주소
 const ICE    = { iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']}] };
 const HUES   = ['#2e6ae6','#ee6352','#23b37a','#9b5de5','#f0a52a','#1fa5b8'];
@@ -714,7 +714,8 @@ function renderPeople(){
   const n=Object.keys(people).length;
   $('pcount').textContent=n;
   document.querySelectorAll('#people .slot').forEach(s=>s.remove());
-  for(let i=n;i<MAX;i++){ const s=document.createElement('div'); s.className='pt slot'; s.textContent='빈 자리'; $('people').appendChild(s); }
+  const slots=Math.max(0, Math.min(MAX,4)-n);   // 빈 자리는 4칸까지만 (많아지면 지저분해진다)
+  for(let i=0;i<slots;i++){ const s=document.createElement('div'); s.className='pt slot'; s.textContent='빈 자리'; $('people').appendChild(s); }
   refreshStatus();
 }
 function setCam(P,st){
@@ -843,6 +844,12 @@ function capSender(sender, maxBitrate, pref){
     sender.setParameters(p).catch(()=>{});
   }catch(e){}
 }
+function capFor(base){
+  // 상대가 많을수록 1명당 화질을 낮춘다 (8명이면 내 업로드가 7배가 된다)
+  const n = Math.max(1, Object.keys(conns).length);
+  const f = n<=2 ? 1 : (n<=4 ? 0.6 : 0.4);
+  return Math.round(base*f);
+}
 function applyTracks(C){
   const ts=C.pc.getTransceivers(); if(ts.length<3) return;
   const sv=screenStream?screenStream.getVideoTracks()[0]:null, cv=camStream?camStream.getVideoTracks()[0]:null;
@@ -850,8 +857,8 @@ function applyTracks(C){
   ts[1].sender.replaceTrack(mixTrack).catch(()=>{});
   ts[2].sender.replaceTrack(cv).catch(()=>{});
   // 폰이 과부하로 멈추지 않게 보내는 양을 제한한다
-  capSender(ts[0].sender, CAP_SCREEN, 'maintain-resolution');  // 화면은 글자가 보여야 하니 해상도 우선
-  capSender(ts[2].sender, CAP_CAM,    'balanced');
+  capSender(ts[0].sender, capFor(CAP_SCREEN), 'maintain-resolution');  // 화면은 글자가 보여야 하니 해상도 우선
+  capSender(ts[2].sender, capFor(CAP_CAM),    'balanced');
 }
 function applyAll(){ Object.values(conns).forEach(applyTracks); }
 
@@ -950,12 +957,14 @@ async function enterNet(code, initialIds){
     if(!known.has(id)) addSys(P.name+'님이 들어왔어요');
     ensureConn(id);
     verifyHost();
+    setTimeout(applyAll, 1500);   // 인원이 바뀌면 화질 상한을 다시 건다
   });
   const onRem=mem.on('child_removed', s=>{
     const id=s.key; if(id===myId) return;
     const P=people[id]; if(P) addSys(P.name+'님이 나갔어요');
     closeConn(id); dropPerson(id);
-    verifyHost();   // 방장이 나갔으면 남은 사람 중 가장 먼저 온 사람이 이어받는다
+    verifyHost();
+    setTimeout(applyAll, 500);   // 방장이 나갔으면 남은 사람 중 가장 먼저 온 사람이 이어받는다
   });
   const href=roomRef('host');
   const onHost=href.on('value', s=>{ setHost(s.val()||null); });
@@ -1020,7 +1029,7 @@ $('go').onclick=async()=>{
     initDB();
     const snap=await withTimeout(db.ref(ROOT+'/'+code+'/members').once('value'),10000);
     if(!snap.exists()){ entryError('그 코드의 방이 없어요. 코드를 다시 확인해 주세요.'); return; }
-    if(snap.numChildren()>=MAX){ entryError('방이 꽉 찼어요. 최대 4명까지 들어갈 수 있어요.'); return; }
+    if(snap.numChildren()>=MAX){ entryError('방이 꽉 찼어요. 최대 '+MAX+'명까지 들어갈 수 있어요.'); return; }
     await withTimeout(enterNet(code, Object.keys(snap.val()||{})),10000);
   }catch(e){ entryError('연결 서버에 닿지 못했어요. 인터넷 연결을 확인해 주세요.'); }
 };
@@ -1476,6 +1485,7 @@ if(/KAKAOTALK/i.test(navigator.userAgent) && /^https?:$/.test(location.protocol)
   location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(location.href);
 }
 window.addEventListener('load',()=>{
+  try{ $('maxN').textContent=MAX; }catch(e){}
   try{ const n=localStorage.getItem('svName'); if(n) $('nick').value=n; }catch(e){}
   // 파일로 연 경우: 웹 주소(미니PC)에서만 쓰도록 안내한다
   if(isFile){
