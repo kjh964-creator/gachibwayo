@@ -482,7 +482,7 @@ body.view-notes #notes{display:block}
           <small><b>USB</b>: 데이터 전송용 케이블로 연결 후 폰에서 [USB 디버깅 허용]</small></li>
       <li>처음이면 폰에서 <b>개발자 옵션</b>을 먼저 켜세요<br>
           <small>설정 → 휴대전화 정보 → 빌드번호 7번 연타</small></li>
-      <li><b>폰 화면 창</b>이 뜨면 아래 <b>[폰 화면 창 공유]</b> → 목록에서 <b>"폰 화면"</b> 창 선택</li>
+      <li><b>폰 화면 창</b>이 뜨면 아래 <b>[폰 화면 창 공유]</b> → <b>[창]</b> 탭에서 <b>폰 이름이 적힌 창</b> 선택<br><small>예: "진호의 Z Flip5" 처럼 폰 모델 이름으로 나옵니다</small></li>
     </ol>
     <div class="col">
       <button class="main" id="phGet">프로그램 받기</button>
@@ -1246,7 +1246,7 @@ async function startShare(slot){
     pickShareImage(slot, '이 기기는 화면 캡처가 안 돼요. 보여줄 화면을 사진으로 골라 주세요');
     return;
   }
-  if(!IS_PHONE) toast('폰 화면을 보여주려면 [창] 탭에서 "폰 화면" 을 고르세요');
+  if(!IS_PHONE) toast('폰을 보여주려면 [창] 탭에서 폰 이름이 적힌 창을 고르세요');
   let st=null;
   try{
     st=await navigator.mediaDevices.getDisplayMedia({
@@ -1294,7 +1294,7 @@ function sharePhone(){
   }catch(e){}
   toast('폰 화면을 띄우는 중이에요…');
   setTimeout(()=>{
-    toast('공유창에서 [창] 탭 → "폰 화면" 을 고르세요');
+    toast('[창] 탭에서 폰 이름이 적힌 창을 고르세요 (예: 진호의 Z Flip5)');
     startShare(freeSlot()||1);
   }, 3500);
 }
