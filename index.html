@@ -135,6 +135,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .invite b{font-size:24px;font-weight:800;letter-spacing:.16em;color:var(--ink)}
 .invite button{height:38px;padding:0 14px;border-radius:11px;background:var(--blue);color:#fff;font-weight:700;display:flex;align-items:center;gap:6px;box-shadow:var(--press)}
 .invite button svg.i{width:15px;height:15px}
+.phonelink{margin-top:14px;font-size:13px;font-weight:700;color:var(--blue);text-decoration:underline;text-underline-offset:3px}
 
 /* 오른쪽 */
 .side{display:flex;flex-direction:column;gap:12px;min-height:0}
@@ -434,6 +435,7 @@ body.view-notes #notes{display:block}
         <h3>아직 공유 중인 화면이 없어요</h3>
         <p>누군가 화면 공유를 켜면 여기에 작게 나타나요. 눌러서 크게 볼 수 있어요.</p>
         <div class="invite"><span>초대 코드</span><b id="icode"></b><button id="inv2"><svg class="i"><use href="#i-copy"/></svg>복사</button></div>
+        <button class="phonelink" id="phoneHelp">폰 화면도 공유할 수 있어요 — 방법 보기</button>
       </div>
     </section>
 
@@ -1261,27 +1263,12 @@ async function startShare(slot){
 const PHONE_PKG = 'https://imist.co.kr/static/phone-screen.exe';
 $('bShare').onclick=()=>{
   if(shareCount()>0){ openShareMenu(); return; }
-  if(IS_PHONE){ startShare(1); return; }   // 폰은 바로 (사진 공유로 넘어간다)
-  openShareChoice();
+  startShare(1);   // 바로 공유 선택창 — 폰 화면을 보여줄 거면 목록에서 [폰 화면] 창을 고르면 된다
 };
-function openShareChoice(){
-  const box=$('shmBtns'); box.innerHTML='';
-  const add=(label,cls,fn)=>{
-    const b=document.createElement('button');
-    if(cls) b.className=cls;
-    b.textContent=label;
-    b.onclick=()=>{ closeShareMenu(); fn(); };
-    box.appendChild(b);
-  };
-  add('이 컴퓨터 화면 공유','main',()=>startShare(1));
-  add('폰 화면 공유하기','',()=>openPhoneGuide());
-  add('닫기','',closeShareMenu);
-  $('shmP').textContent = '무엇을 보여줄까요?';
-  $('shmenu').classList.add('show');
-}
 function openPhoneGuide(){ $('phguide').classList.add('show'); }
 function closePhoneGuide(){ $('phguide').classList.remove('show'); }
 $('phNo').onclick=closePhoneGuide;
+$('phoneHelp').onclick=openPhoneGuide;
 $('phguide').addEventListener('click',e=>{ if(e.target===$('phguide')) closePhoneGuide(); });
 $('phGet').onclick=()=>{ window.open(PHONE_PKG,'_blank'); toast('내려받는 중이에요. 받은 phone-screen.exe 를 더블클릭하세요'); };
 $('phShare').onclick=()=>{ closePhoneGuide(); startShare(freeSlot()||1); };
