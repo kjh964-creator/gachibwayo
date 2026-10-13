@@ -1249,7 +1249,7 @@ async function startShare(slot){
   let st=null;
   try{
     st=await navigator.mediaDevices.getDisplayMedia({
-      video:{ displaySurface:'monitor', frameRate:{ideal: IS_PHONE?10:30} }, audio:true,
+      video:{ frameRate:{ideal: IS_PHONE?10:30} }, audio:true,
       systemAudio:'include', surfaceSwitching:'include', selfBrowserSurface:'exclude', preferCurrentTab:false });
   }catch(e){
     if(e&&e.name==='NotAllowedError'){ toast('화면 공유를 취소했어요.'); return; }
