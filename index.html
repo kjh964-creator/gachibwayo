@@ -1264,15 +1264,47 @@ async function startShare(slot){
 const PHONE_PKG = 'https://imist.co.kr/static/phone-screen.exe';
 $('bShare').onclick=()=>{
   if(shareCount()>0){ openShareMenu(); return; }
-  startShare(1);   // 바로 공유 선택창 — 폰 화면을 보여줄 거면 목록에서 [폰 화면] 창을 고르면 된다
+  if(IS_PHONE){ startShare(1); return; }   // 폰은 사진 공유로
+  openShareChoice();
 };
+function openShareChoice(){
+  const box=$('shmBtns'); box.innerHTML='';
+  const add=(label,cls,fn)=>{
+    const b=document.createElement('button');
+    if(cls) b.className=cls;
+    b.textContent=label;
+    b.onclick=()=>{ closeShareMenu(); fn(); };
+    box.appendChild(b);
+  };
+  add('이 컴퓨터 화면','main',()=>startShare(1));
+  add('폰 화면 (프로그램 자동 실행)','',()=>sharePhone());
+  add('닫기','',closeShareMenu);
+  $('shmP').textContent = '무엇을 보여줄까요?';
+  $('shmenu').classList.add('show');
+}
+// 폰 화면: 설치돼 있으면 프로그램을 띄우고, 이어서 공유창을 연다
+function sharePhone(){
+  let went=false;
+  try{
+    const f=document.createElement('iframe');
+    f.style.display='none'; f.src='phonescreen://open';
+    document.body.appendChild(f);
+    setTimeout(()=>f.remove(), 2000);
+    went=true;
+  }catch(e){}
+  toast('폰 화면을 띄우는 중이에요…');
+  setTimeout(()=>{
+    toast('공유창에서 [창] 탭 → "폰 화면" 을 고르세요');
+    startShare(freeSlot()||1);
+  }, 3500);
+}
 function openPhoneGuide(){ $('phguide').classList.add('show'); }
 function closePhoneGuide(){ $('phguide').classList.remove('show'); }
 $('phNo').onclick=closePhoneGuide;
 $('phoneHelp').onclick=openPhoneGuide;
 $('phguide').addEventListener('click',e=>{ if(e.target===$('phguide')) closePhoneGuide(); });
 $('phGet').onclick=()=>{ window.open(PHONE_PKG,'_blank'); toast('내려받는 중이에요. 받은 phone-screen.exe 를 더블클릭하세요'); };
-$('phShare').onclick=()=>{ closePhoneGuide(); startShare(freeSlot()||1); };
+$('phShare').onclick=()=>{ closePhoneGuide(); sharePhone(); };
 
 function closeShareMenu(){ $('shmenu').classList.remove('show'); }
 $('shmenu').addEventListener('click',e=>{ if(e.target===$('shmenu')) closeShareMenu(); });
