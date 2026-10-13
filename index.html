@@ -1246,6 +1246,7 @@ async function startShare(slot){
     pickShareImage(slot, '이 기기는 화면 캡처가 안 돼요. 보여줄 화면을 사진으로 골라 주세요');
     return;
   }
+  if(!IS_PHONE) toast('폰 화면을 보여주려면 [창] 탭에서 "폰 화면" 을 고르세요');
   let st=null;
   try{
     st=await navigator.mediaDevices.getDisplayMedia({
